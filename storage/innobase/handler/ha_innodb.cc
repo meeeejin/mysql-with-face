@@ -156,7 +156,7 @@ static char*	innobase_reset_monitor_counter		= NULL;
 static char*	innobase_reset_all_monitor_counter	= NULL;
 
 /* These variables can be set for SSD cache. */
-#if SSD_CACHE_FACE
+#ifdef SSD_CACHE_FACE
 static my_bool      innobase_use_ssd_cache  = FALSE;
 static char*        innobase_ssd_cache_file = NULL;
 static long long    innobase_ssd_cache_size = 0;
@@ -2931,7 +2931,7 @@ mem_free_and_error:
 		goto error;
 	}
 
-#if SSD_CACHE_FACE
+#ifdef SSD_CACHE_FACE
     srv_use_ssd_cache = (ibool) innobase_use_ssd_cache;
     srv_ssd_cache_file = innobase_ssd_cache_file;
     srv_ssd_cache_size = (ulint) innobase_ssd_cache_size;
@@ -15708,7 +15708,7 @@ static MYSQL_SYSVAR_STR(data_home_dir, innobase_data_home_dir,
   "The common part for InnoDB table spaces.",
   NULL, NULL, NULL);
 
-#if SSD_CACHE_FACE
+#ifdef SSD_CACHE_FACE
 static MYSQL_SYSVAR_BOOL(use_ssd_cache, innobase_use_ssd_cache,
   PLUGIN_VAR_NOCMDARG | PLUGIN_VAR_READONLY,
   "Enable SSD cache (disenabled by default).",
@@ -16525,7 +16525,7 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
   MYSQL_SYSVAR(compression_level),
   MYSQL_SYSVAR(data_file_path),
   MYSQL_SYSVAR(data_home_dir),
-#if SSD_CACHE_FACE
+#ifdef SSD_CACHE_FACE
   MYSQL_SYSVAR(use_ssd_cache),
   MYSQL_SYSVAR(ssd_cache_file),
   MYSQL_SYSVAR(ssd_cache_size),

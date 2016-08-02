@@ -2055,6 +2055,35 @@ fil_read_first_page(
 
 	os_file_read(data_file, page, 0, UNIV_PAGE_SIZE);
 
+#ifdef SSD_CACHE_FACE
+    if (srv_use_ssd_cache && ssd_cache_recovery) {
+        /* Check SSD cache first when reading the first page.
+         If the target page exists in SSD cache, read the page
+         from the SSD cache because the page in SSD cache is
+         the most recent copy of the target page. */
+        ulint fold;
+        ulint space;
+        ulint offset;
+        ulint ssd_offset;
+        ssd_meta_dir_t* old_entry = NULL;
+
+        space = mach_read_from_4(page + FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID);
+        offset = mach_read_from_4(page + FIL_PAGE_OFFSET);
+
+        fold = buf_page_address_fold(space, offset);
+
+        HASH_SEARCH(hash, ssd_cache, fold, ssd_meta_dir_t*, old_entry,
+                            ut_ad(1), old_entry->space == space && old_entry->offset == offset);
+
+        if (old_entry) {
+            ssd_offset = old_entry->ssd_offset * UNIV_PAGE_SIZE;
+            if ((ulint) pread(ssd_cache_fd, page, UNIV_PAGE_SIZE, ssd_offset) != UNIV_PAGE_SIZE) {
+                ut_a(0); 
+            }
+        }
+    }
+#endif
+
 	/* The FSP_HEADER on page 0 is only valid for the first file
 	in a tablespace.  So if this is not the first datafile, leave
 	*flags and *space_id as they were read from the first file and
@@ -4142,6 +4171,9 @@ fil_user_tablespace_restore_page(
 	ulint	page_size;
 	ulint	buflen;
 	byte*	page;
+#ifdef SSD_CACHE_FACE
+    byte*   tmp_buf = NULL;
+#endif
 
 	ib_logf(IB_LOG_LEVEL_INFO, "Restoring page %lu of tablespace %lu",
 		page_no, fsp->id);
@@ -4149,14 +4181,39 @@ fil_user_tablespace_restore_page(
 	// find if double write buffer has page_no of given space id
 	page = recv_sys->dblwr.find_page(fsp->id, page_no);
 
+#ifdef SSD_CACHE_FACE                                                                                
 	if (!page) {
-                ib_logf(IB_LOG_LEVEL_WARN, "Doublewrite does not have "
-			"page_no=%lu of space: %lu", page_no, fsp->id);
-		err = false;
-		goto out;
+        if (srv_use_ssd_cache && ssd_cache_recovery) {
+            /* Find the target page in SSD cache. FaCE does not use
+             doublewrit buffer. So the most recent copy of the target
+             page may exist in SSD cache. */
+            ulint fold;
+            ulint ssd_offset;
+            ssd_meta_dir_t* old_entry = NULL;
+
+            fold = buf_page_address_fold(fsp->id, page_no);                                              
+            HASH_SEARCH(hash, ssd_cache, fold, ssd_meta_dir_t*, old_entry,
+                        ut_ad(1), old_entry->space == fsp->id && old_entry->offset == page_no);              
+            if (old_entry) {
+                assert(!posix_memalign((void**) &tmp_buf, 4096, UNIV_PAGE_SIZE));
+
+                ssd_offset = old_entry->ssd_offset * UNIV_PAGE_SIZE;                                     
+                if ((ulint) pread(ssd_cache_fd, tmp_buf, UNIV_PAGE_SIZE, ssd_offset) == UNIV_PAGE_SIZE) {
+                    page = tmp_buf;                                                             
+                }
+            }
+        }
+    }
+#endif
+
+    if (!page) {
+            ib_logf(IB_LOG_LEVEL_WARN, "Doublewrite does not have "
+			    "page_no=%lu of space: %lu", page_no, fsp->id);
+		    err = false;
+		    goto out;
 	}
 
-        flags = mach_read_from_4(FSP_HEADER_OFFSET + FSP_SPACE_FLAGS + page);
+    flags = mach_read_from_4(FSP_HEADER_OFFSET + FSP_SPACE_FLAGS + page);
 	zip_size = fsp_flags_get_zip_size(flags);
 	page_size = fsp_flags_get_page_size(flags);
 
@@ -4173,6 +4230,11 @@ fil_user_tablespace_restore_page(
 
 	os_file_flush(fsp->file);
 out:
+#ifdef SSD_CACHE_FACE
+    if (srv_use_ssd_cache && ssd_cache_recovery && tmp_buf) {
+        free(tmp_buf);
+    }
+#endif
 	return(err);
 }
 

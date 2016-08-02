@@ -180,8 +180,9 @@ the user from forgetting the 'newraw' keyword to my.cnf */
 
 UNIV_INTERN ibool	srv_created_new_raw	= FALSE;
 
-#include "face0face.h"
 #ifdef SSD_CACHE_FACE
+#include "face0face.h"
+
 UNIV_INTERN ibool   srv_use_ssd_cache = FALSE;
 UNIV_INTERN char*   srv_ssd_cache_file = NULL;
 UNIV_INTERN ulint   srv_ssd_cache_size = ULINT_MAX;

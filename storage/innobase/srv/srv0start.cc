@@ -1990,6 +1990,11 @@ innobase_start_or_create_for_mysql(void)
 		return(DB_ERROR);
 	}
 
+#ifdef SSD_CACHE_FACE
+    ib_logf(IB_LOG_LEVEL_INFO,
+        "Initializing SSD cache succeeded!");
+#endif
+
 	ib_logf(IB_LOG_LEVEL_INFO,
 		"Completed initialization of buffer pool");
 

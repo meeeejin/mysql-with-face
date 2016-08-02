@@ -1003,7 +1003,7 @@ flush:
 
     ut_ad(first_free == buf_dblwr->first_free);
 
-#if SSD_CACHE_FACE
+#ifdef SSD_CACHE_FACE
     if (srv_use_ssd_cache) {
         if (page_num != 0) {
             ut_a(page_num == buf_dblwr->first_free);
@@ -1232,17 +1232,15 @@ UNIV_INTERN
 void
 insert_ssd_metadata_for_recovery(
 /*=============================*/
-    ssd_meta_dir_t* metadata_entry, /*!< in: metadata entry */
-    ulint meta_idx)                 /*!< in: metadata index */
+    ulint fold,     /*!< in: fold value */
+    ulint meta_idx) /*!< in: metadata index */
 {
     rw_lock_x_lock(ssd_cache_meta_idx_lock);
     ssd_cache_meta_free_idx = meta_idx + 1;
     rw_lock_x_unlock(ssd_cache_meta_idx_lock);
 
-    metadata_entry->ssd_offset = meta_idx;
-
-    memcpy(&ssd_meta_dir[meta_idx], metadata_entry, sizeof(ssd_meta_dir_t));
-    //fprintf(stderr, "metadata index: %lu, (space id, offset) = (%u, %u)\n", meta_idx, ssd_meta_dir[meta_idx].space, ssd_meta_dir[meta_idx].offset);
+    HASH_INSERT(ssd_meta_dir_t, hash, ssd_cache, fold, &ssd_meta_dir[meta_idx]);
+    fprintf(stderr, "metadata index: %lu, (space id, offset) = (%u, %u)\n", meta_idx, ssd_meta_dir[meta_idx].space, ssd_meta_dir[meta_idx].offset);
 }
 
 /**************************************************************//**
@@ -1340,12 +1338,7 @@ insert_ssd_metadata(
     ulint meta_idx) /*!< in: metadata index */
 {
     ssd_meta_dir[meta_idx].flags |= BM_VALID;
-
     HASH_INSERT(ssd_meta_dir_t, hash, ssd_cache, fold, &ssd_meta_dir[meta_idx]);
-
-    //fprintf(stderr, "metadata index: %lu (%lu), (space id, offset) = (%u, %u)\n",
-    //        ssd_meta_dir[meta_idx].ssd_offset, fold,
-    //        ssd_meta_dir[meta_idx].space, ssd_meta_dir[meta_idx].offset);
 }
 
 /**************************************************************//**
@@ -1428,7 +1421,6 @@ insert_page_in_ssd_cache(
     ulint page_num,     /*!< in: total number of pages to write */
     byte* buf)          /*!< in: buffer used in writing to the SSD cache */
 {
-	ssize_t     r;
     ulint       ssd_offset = 0;
     ulint       len1 = 0;
     ulint       len2 = 0;
@@ -1453,14 +1445,11 @@ insert_page_in_ssd_cache(
     write_buf = buf;
 
     /* Write out the pages of the first group. */
-    r = pwrite(ssd_cache_fd, (void*) write_buf, len1, ssd_offset);
-
-    /*if((ulint) r == len1) {
-        fprintf(stderr, "Insertion in SSD cache succeeded! (metadata index) = (%lu, %lu)\n",
-                        first_idx, page_num);
-	} else {
-        fprintf(stderr, "Insertion in SSD cache failed.\n");
-	}*/
+    if ((ulint) pwrite(ssd_cache_fd, (void*) write_buf, len1, ssd_offset) != len1) {
+        ib_logf(IB_LOG_LEVEL_ERROR,
+                "Insertion in SSD cache failed.");
+        ut_a(0);
+    }
 
     /* No unwritten pages in the second group. */
     if (!len2)  return;
@@ -1469,17 +1458,11 @@ insert_page_in_ssd_cache(
     write_buf = buf + len1;
 
     /* Write out the pages of the second group. */
-    r = pwrite(ssd_cache_fd, (void*) write_buf, len2, ssd_offset);
-
-    /*if((ulint) r == len2) {
-        fprintf(stderr, "Insertion in SSD cache succeeded! (metadata index) = (0, %lu)\n", 
-                        write_page_num2);
-    } else {
-        fprintf(stderr, "Insertion in SSD cache failed.\n");
-    }*/
-
-    /* Close the file descriptor when MySQL is shut down. */
-	//close(fd);
+    if ((ulint) pwrite(ssd_cache_fd, (void*) write_buf, len2, ssd_offset) != len2) {
+        ib_logf(IB_LOG_LEVEL_ERROR,
+                "Insertion in SSD cache failed.");
+        ut_a(0);
+    }
 }
 
 /**************************************************************//**
@@ -1527,21 +1510,20 @@ read_ssd_cache_for_gsc(
     }
 
     /* Read in the pages of the first group. */
-    if ((ulint) pread(ssd_cache_fd, read_buf, len1, ssd_offset) == len1) {
-    //    fprintf(stderr, "Reading for rebuilding write buffer1 succeeded! (metadata index) = (%lu)\n",
-    //                    first_idx);
-    } else {
-    //    fprintf(stderr, "Reading for rebuilding write buffer1 failed\n");
+    if ((ulint) pread(ssd_cache_fd, read_buf, len1, ssd_offset) != len1) {
+        ib_logf(IB_LOG_LEVEL_ERROR,
+                "Reading SSD Cache for rebuilding write buffer failed.");
+        ut_a(0);
     }
 
     /* Read in the pages of the second group. */
     if (len2 != 0) {
         ssd_offset = 0;
 
-        if ((ulint) pread(ssd_cache_fd, (read_buf + len1), len2, ssd_offset) == len2) {
-    //        fprintf(stderr, "Reading for rebuilding write buffer2 succeeded! (metadata index) = (0)\n");
-        } else {
-    //        fprintf(stderr, "Reading for rebuilding write buffer2 failed\n");
+        if ((ulint) pread(ssd_cache_fd, (read_buf + len1), len2, ssd_offset) != len2) {
+            ib_logf(IB_LOG_LEVEL_ERROR,
+                    "Reading SSD Cache for rebuilding write buffer failed.");
+            ut_a(0);
         }
     }
 

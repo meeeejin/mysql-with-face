@@ -217,9 +217,6 @@ buf_read_page_low(
             if (entry && (ssd_meta_dir[entry->ssd_offset].flags & BM_VALID) && !((ssd_meta_dir[entry->ssd_offset].flags & BM_WB))) {
                 ut_a((entry->space == bpage->space) && (entry->offset == bpage->offset));
 
-  //              fprintf(stderr, "The page is found in SSD cache! (metadata index) = (%lu), (space, offset) = (%u, %u)\n",
-//                                entry->ssd_offset, entry->space, entry->offset);
-
                 /* Wait until the IO in progress is finished. */
                 for (;;) {
                     enum buf_io_fix io_fix;
@@ -240,7 +237,6 @@ buf_read_page_low(
                             ssd_meta_dir[entry->ssd_offset].flags |= BM_REF;
                             *err = DB_SUCCESS;
                         } else {
-                    //        fprintf(stderr, "Reading SSD cache file failed.\n");
                             *err = DB_ERROR;
                         }
 

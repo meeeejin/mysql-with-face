@@ -164,10 +164,10 @@ UNIV_INTERN
 void
 create_new_ssd_metadata(
 /*====================*/
-    ulint space,            /*!< in: space id */
-    ulint offset,           /*!< in: page number */
-    lsn_t lsn,              /*!< in: lsn */
-    ulint meta_idx);        /*!< in: metadata index */
+    ulint   space,      /*!< in: space id */
+    ulint   offset,     /*!< in: page number */
+    lsn_t   lsn,        /*!< in: lsn */
+    ulint   meta_idx);  /*!< in: metadata index */
 
 /**************************************************************//**
 Insert metadata entry into the metadata directory. */
@@ -175,8 +175,8 @@ UNIV_INTERN
 void
 insert_ssd_metadata(
 /*================*/
-    ulint           fold,           /*!< in: fold value */
-    ulint           meta_idx);      /*!< in: metadata index */
+    ulint   fold,       /*!< in: fold value */
+    ulint   meta_idx);  /*!< in: metadata index */
 
 /**************************************************************//**
 Insert metadata entry into the metadata directory with no lock
@@ -185,8 +185,8 @@ UNIV_INTERN
 void
 insert_ssd_metadata_for_recovery(
 /*=============================*/
-    ssd_meta_dir_t* metadata_entry, /*!< in: metadata entry */
-    ulint meta_idx);                /*!< in: metadata index */
+    ulint   fold,       /*!< in: fold value */
+    ulint   meta_idx);  /*!< in: metadata index */
 
 /**************************************************************//**
 Update SSD cache hash table and metadata directory. */
@@ -197,10 +197,10 @@ update_ssd_cache_info(
     ulint   space,      /*!< in: space id */
     ulint   offset,     /*!< in: page number */
     lsn_t   lsn,        /*!< in: lsn */
-    ulint meta_idx,    /*!< in: metadata index */
-    ulint first_idx,
-    byte* read_buf,
-    bool    ssd_cache_size_over_first);
+    ulint   meta_idx,   /*!< in: metadata index */
+    ulint   first_idx,  /*!< in: first metadata index */
+    byte*   read_buf,   /*!< in: buffer to write */
+    bool    ssd_cache_size_over_first); /*!< in: true if SSD cache is filled for the first time */
 
 /**************************************************************//**
 Insert a page into the SSD cache. */
@@ -208,9 +208,9 @@ UNIV_INTERN
 void
 insert_page_in_ssd_cache(
 /*=====================*/
-    ulint first_idx,    /*!< in: metadata index of the first page to write */
-    ulint page_num,     /*!< in: total number of pages to write */
-    byte* buf);         /*!< in: buffer used in writing to the SSD cache */
+    ulint   first_idx,  /*!< in: metadata index of the first page to write */
+    ulint   page_num,   /*!< in: total number of pages to write */
+    byte*   buf);       /*!< in: buffer used in writing to the SSD cache */
 
 /**************************************************************//**                  
 Read SSD cache and return read buffer to prepare group second                        
@@ -219,9 +219,9 @@ UNIV_INTERN
 byte*   
 read_ssd_cache_for_gsc(
 /*============================*/                                                     
-    ulint first_idx,            /*!< in: metadata index of the first page to write */
-    ulint total_page_num,       /*!< in: the number of total pages to write */       
-    bool  ssd_cache_size_over_first);                                                 
+    ulint   first_idx,      /*!< in: metadata index of the first page to write */
+    ulint   total_page_num, /*!< in: the number of total pages to write */       
+    bool    ssd_cache_size_over_first); /*!< in: true if SSD cache is filled for the first time */                                             
 
 /**************************************************************//**
 Rebuild write buffer to distinguish three types of pages such
@@ -231,12 +231,12 @@ UNIV_INTERN
 byte*
 rebuild_write_buf_for_ssd_cache(
 /*============================*/
-    ulint first_idx,        /*!< in: metadata index of the first page to write */
-    ulint total_page_num,   /*!< in: the number of total pages to write */
-    ulint gsc_page_num,     /*!< in: the number of pages to give second chance */
-    byte* buf,              /*!< in: buffer used in writing to the SSD cache */
-    byte* read_buf,
-    bool    ssd_cache_size_over_first);
+    ulint   first_idx,      /*!< in: metadata index of the first page to write */
+    ulint   total_page_num, /*!< in: the number of total pages to write */
+    ulint   gsc_page_num,   /*!< in: the number of pages to give second chance */
+    byte*   buf,            /*!< in: buffer used in writing to the SSD cache */
+    byte*   read_buf,       /*!< in: buffer to write */
+    bool    ssd_cache_size_over_first); /*!< in: true if SSD cache is filled for the first time */
 #endif /*END OF SSD_CACHE_FACE*/
 
 #endif /* UNIV_HOTBACKUP */

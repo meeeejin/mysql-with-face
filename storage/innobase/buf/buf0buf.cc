@@ -261,6 +261,7 @@ UNIV_INTERN rw_lock_t*		ssd_cache_hash_lock;
 UNIV_INTERN rw_lock_t*      ssd_cache_meta_idx_lock;
 UNIV_INTERN bool            ssd_cache_size_over;
 UNIV_INTERN int             ssd_cache_fd = 0;
+UNIV_INTERN bool            ssd_cache_recovery;
 #endif
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
@@ -1440,31 +1441,28 @@ buf_pool_free_instance(
 
 #ifdef SSD_CACHE_FACE
 /********************************************************************//**
-Rebuild SSD metadata directory and SSD cache hash table from existing
-SSD cache. */
+Rebuild SSD metadata directory and SSD cache hash table
+from existing SSD cache. */
 static
 bool
-rebuild_meta_and_hash_from_ssd_cache(
-/*=================================*/
-int fd)     /*!< in: file descriptor */
+rebuild_meta_and_hash_from_ssd_cache(void)
+/*======================================*/
 {
     byte*           tmp_buf;
-    ib_uint64_t     i;
     ulint           space;
     ulint           offset;
     lsn_t           lsn;
-    ssd_meta_dir_t* entry = NULL;
     ssd_meta_dir_t* old_entry = NULL;
     ulint           fold;
-    ib_uint64_t     ssd_offset = 0;
+    ulint           ssd_offset = 0;
 
-    tmp_buf = static_cast<byte*>(mem_alloc(UNIV_PAGE_SIZE));
+    assert(!posix_memalign((void**) &tmp_buf, 4096, UNIV_PAGE_SIZE));
 
-    for (i = 0; i < ssd_cache_size; i++) {
-        if ((ulint) pread(fd, tmp_buf, UNIV_PAGE_SIZE, ssd_offset) == UNIV_PAGE_SIZE) {
+    for (ulint i = 0; i < ssd_cache_size; i++) {
+        if ((ulint) pread(ssd_cache_fd, tmp_buf, UNIV_PAGE_SIZE, ssd_offset) == UNIV_PAGE_SIZE) {
             /* Extract space id and page offset. */
-            offset = mach_read_from_4(tmp_buf + FIL_PAGE_OFFSET);
             space = mach_read_from_4(tmp_buf + FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID);
+            offset = mach_read_from_4(tmp_buf + FIL_PAGE_OFFSET);
 
             if (space == ULINT_MAX && offset == ULINT_MAX) {
                 /* This page is invalid page, so jump to the next page. */
@@ -1472,7 +1470,7 @@ int fd)     /*!< in: file descriptor */
                 continue;
             }
 
-            if (buf_page_is_corrupted(false, tmp_buf, 0)) {
+            if (buf_page_is_corrupted(true, tmp_buf, 0)) {
                 /* This page is corrupted, so jump to the next page. */
                 ssd_offset += UNIV_PAGE_SIZE;
                 continue;
@@ -1489,20 +1487,25 @@ int fd)     /*!< in: file descriptor */
                 smaller than the LSN of the data in the tmp_buf, delete the old entry and
                 update hash table. */
                 if (old_entry->lsn < lsn) {
+                    old_entry->flags &= ~BM_VALID;
                     HASH_DELETE(ssd_meta_dir_t, hash, ssd_cache, fold, old_entry);
-                    ssd_meta_dir[old_entry->ssd_offset].flags &= ~BM_VALID;
+                
+                    create_new_ssd_metadata(space, offset, lsn, i);
+                    insert_ssd_metadata_for_recovery(fold, i);
+                
+                    ulint fsp_id;
+                    fsp_id = mach_read_from_4(FSP_HEADER_OFFSET + tmp_buf + FSP_SPACE_ID);
 
-                    //entry = create_new_ssd_metadata(space, offset, lsn);
-
-                    HASH_INSERT(ssd_meta_dir_t, hash, ssd_cache, fold, entry);
-                    insert_ssd_metadata_for_recovery(entry, i);
+                    fprintf(stderr, "%lu = (%lu, %lu, %lu)\n", i, fsp_id, space, offset);
                 }
             } else {
-                /* Create a new metadata entry. */
-                //entry = create_new_ssd_metadata(space, offset, lsn);
+                create_new_ssd_metadata(space, offset, lsn, i);
+                insert_ssd_metadata_for_recovery(fold, i);
 
-                HASH_INSERT(ssd_meta_dir_t, hash, ssd_cache, fold, entry);
-                insert_ssd_metadata_for_recovery(entry, i);
+                ulint fsp_id;
+                fsp_id = mach_read_from_4(FSP_HEADER_OFFSET + tmp_buf + FSP_SPACE_ID);
+
+                fprintf(stderr, "%lu = (%lu, %lu, %lu)\n", i, fsp_id, space, offset);
             }
         } else {
             fprintf(stderr, "Rebuilding from existing SSD cache failed.\n");
@@ -1512,7 +1515,7 @@ int fd)     /*!< in: file descriptor */
         ssd_offset += UNIV_PAGE_SIZE;
     }
 
-    mem_free(tmp_buf);
+    free(tmp_buf);
 
     return(true);
 }
@@ -1530,9 +1533,6 @@ buf_pool_init(
 {
 	ulint i;
 	const ulint	size	= total_size / n_instances;
-#ifdef SSD_CACHE_FACE
-	byte* invalid_page  = NULL;
-#endif
 
 	ut_ad(n_instances > 0);
 	ut_ad(n_instances <= MAX_BUFFER_POOLS);
@@ -1561,10 +1561,14 @@ buf_pool_init(
 #ifdef SSD_CACHE_FACE
     /* Initialize SSD cache file, SSD cache hash table and SSD metadata directory. */
     if (srv_use_ssd_cache) {
+	    byte* invalid_page  = NULL;
+
     	/* Calculate ssd_cache_size. (= FaCE cache size / page size = 2GB (default) / 16KB) */
         ssd_cache_size = srv_ssd_cache_size / UNIV_PAGE_SIZE;
-        fprintf(stderr, "SSD CACHE SIZE (=num. of cache entry) = %lu\n", ssd_cache_size);
+        ib_logf(IB_LOG_LEVEL_INFO,
+            "SSD CACHE SIZE (=num. of cache entry) = %lu", ssd_cache_size);
         ssd_cache_size_over = false;
+        ssd_cache_recovery = false;
 
         /* Create a SSD cache hash table. */
         ssd_cache = ha_create(2 * ssd_cache_size,
@@ -1592,13 +1596,16 @@ buf_pool_init(
         from existing SSD cache file. Otherwise, Create a SSD cache file. */
         ssd_cache_fd = open(srv_ssd_cache_file, O_RDWR | O_DIRECT, S_IRUSR | S_IWUSR);
     	if (ssd_cache_fd == -1) {
-    		fprintf(stderr, "Create a SSD cache file %s.\n", srv_ssd_cache_file);
+            ib_logf(IB_LOG_LEVEL_INFO,
+                "Create a SSD cache file %s.", srv_ssd_cache_file);
+
     		ssd_cache_fd = open(srv_ssd_cache_file, O_RDWR | O_CREAT | O_DIRECT, S_IRUSR | S_IWUSR);
 
             assert(!posix_memalign((void**) &invalid_page, 4096, UNIV_PAGE_SIZE));
 
         	if (memset(invalid_page, 0x00, UNIV_PAGE_SIZE) == NULL) {
-        		fprintf(stderr, "Initializing invalid page with memset failed.\n");
+                ib_logf(IB_LOG_LEVEL_ERROR,
+        		    "Initializing invalid page with memset failed.");
                 ut_a(0);
         	}
             
@@ -1607,24 +1614,26 @@ buf_pool_init(
 
         	for (i = 0; i < ssd_cache_size; i++) {
         		if (pwrite(ssd_cache_fd, invalid_page, UNIV_PAGE_SIZE, i * UNIV_PAGE_SIZE) < 0) {
-        			fprintf(stderr, "Can't initialize SSD cache file with invalid page.\n");
+        			ib_logf(IB_LOG_LEVEL_ERROR,
+                        "Can't initialize SSD cache file with invalid page.");
                     ut_a(0);
         		}
         	}
        
         	free(invalid_page);
         } else {
-            fprintf(stderr, "SSD cache file already exists %s.\n", srv_ssd_cache_file);
+            ib_logf(IB_LOG_LEVEL_INFO,
+                "SSD cache file already exists in %s.", srv_ssd_cache_file);
 
-            if (rebuild_meta_and_hash_from_ssd_cache(ssd_cache_fd)) {
+            ssd_cache_recovery = true;
+
+            if (rebuild_meta_and_hash_from_ssd_cache()) {
                 fprintf(stderr, "Rebuilding metadata directory and hash table from existing SSD cache succeeded!\n");
             } else {
                 fprintf(stderr, "Rebuilding metadata directory and hash table from existing SSD cache failed.\n");
                 ut_a(0);
-            }    
+            }   
         }
-        
-    	fprintf(stderr, "Initializing SSD cache succeeded!\n");
     }
 #endif
 
@@ -1648,6 +1657,17 @@ buf_pool_free(
 
 	mem_free(buf_pool_ptr);
 	buf_pool_ptr = NULL;
+
+#ifdef SSD_CACHE_FACE
+    if (srv_use_ssd_cache) {
+        /* Frees metadata directory and closes SSD cache file at shutdown. */
+        ha_clear(ssd_cache);
+        hash_table_free(ssd_cache);
+
+        free(ssd_meta_dir);
+        close(ssd_cache_fd);
+    }
+#endif
 }
 
 /********************************************************************//**

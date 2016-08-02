@@ -2083,12 +2083,12 @@ recv_apply_log_recs_for_backup(void)
 				    && !buf_zip_decompress(block, TRUE)) {
 					exit(1);
 				}
-			} else {
-				error = fil_io(OS_FILE_READ, true,
-					       recv_addr->space, 0,
-					       recv_addr->page_no, 0,
-					       UNIV_PAGE_SIZE,
-					       block->frame, NULL);
+            } else {
+                error = fil_io(OS_FILE_READ, true,
+                           recv_addr->space, 0,
+                           recv_addr->page_no, 0,
+                           UNIV_PAGE_SIZE,
+                           block->frame, NULL);
 			}
 
 			if (error != DB_SUCCESS) {

@@ -105,6 +105,7 @@ extern	rw_lock_t*	    ssd_cache_hash_lock;
 extern  rw_lock_t*      ssd_cache_meta_idx_lock;
 extern  bool            ssd_cache_size_over;
 extern  int             ssd_cache_fd;
+extern  bool            ssd_cache_recovery;
 #endif  /*END OF SSD_CACHE_FACE*/
 
 #ifdef UNIV_DEBUG
