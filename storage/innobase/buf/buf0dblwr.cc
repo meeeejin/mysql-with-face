@@ -1240,7 +1240,6 @@ insert_ssd_metadata_for_recovery(
     rw_lock_x_unlock(ssd_cache_meta_idx_lock);
 
     HASH_INSERT(ssd_meta_dir_t, hash, ssd_cache, fold, &ssd_meta_dir[meta_idx]);
-    fprintf(stderr, "metadata index: %lu, (space id, offset) = (%u, %u)\n", meta_idx, ssd_meta_dir[meta_idx].space, ssd_meta_dir[meta_idx].offset);
 }
 
 /**************************************************************//**

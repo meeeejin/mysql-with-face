@@ -1470,7 +1470,7 @@ rebuild_meta_and_hash_from_ssd_cache(void)
                 continue;
             }
 
-            if (buf_page_is_corrupted(true, tmp_buf, 0)) {
+            if (buf_page_is_corrupted(false, tmp_buf, 0)) {
                 /* This page is corrupted, so jump to the next page. */
                 ssd_offset += UNIV_PAGE_SIZE;
                 continue;
@@ -1492,23 +1492,12 @@ rebuild_meta_and_hash_from_ssd_cache(void)
                 
                     create_new_ssd_metadata(space, offset, lsn, i);
                     insert_ssd_metadata_for_recovery(fold, i);
-                
-                    ulint fsp_id;
-                    fsp_id = mach_read_from_4(FSP_HEADER_OFFSET + tmp_buf + FSP_SPACE_ID);
-
-                    fprintf(stderr, "%lu = (%lu, %lu, %lu)\n", i, fsp_id, space, offset);
                 }
             } else {
                 create_new_ssd_metadata(space, offset, lsn, i);
                 insert_ssd_metadata_for_recovery(fold, i);
-
-                ulint fsp_id;
-                fsp_id = mach_read_from_4(FSP_HEADER_OFFSET + tmp_buf + FSP_SPACE_ID);
-
-                fprintf(stderr, "%lu = (%lu, %lu, %lu)\n", i, fsp_id, space, offset);
             }
         } else {
-            fprintf(stderr, "Rebuilding from existing SSD cache failed.\n");
             return(false);
         }
 

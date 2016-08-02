@@ -4185,7 +4185,7 @@ fil_user_tablespace_restore_page(
 	if (!page) {
         if (srv_use_ssd_cache && ssd_cache_recovery) {
             /* Find the target page in SSD cache. FaCE does not use
-             doublewrit buffer. So the most recent copy of the target
+             doublewrite buffer. So the most recent copy of the target
              page may exist in SSD cache. */
             ulint fold;
             ulint ssd_offset;
@@ -4196,8 +4196,8 @@ fil_user_tablespace_restore_page(
                         ut_ad(1), old_entry->space == fsp->id && old_entry->offset == page_no);              
             if (old_entry) {
                 assert(!posix_memalign((void**) &tmp_buf, 4096, UNIV_PAGE_SIZE));
+                ssd_offset = old_entry->ssd_offset * UNIV_PAGE_SIZE;
 
-                ssd_offset = old_entry->ssd_offset * UNIV_PAGE_SIZE;                                     
                 if ((ulint) pread(ssd_cache_fd, tmp_buf, UNIV_PAGE_SIZE, ssd_offset) == UNIV_PAGE_SIZE) {
                     page = tmp_buf;                                                             
                 }
