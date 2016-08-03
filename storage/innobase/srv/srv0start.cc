@@ -1991,8 +1991,10 @@ innobase_start_or_create_for_mysql(void)
 	}
 
 #ifdef SSD_CACHE_FACE
-    ib_logf(IB_LOG_LEVEL_INFO,
-        "Initializing SSD cache succeeded!");
+    if (srv_use_ssd_cache) {
+        ib_logf(IB_LOG_LEVEL_INFO,
+            "Initializing SSD cache succeeded!");
+    }
 #endif
 
 	ib_logf(IB_LOG_LEVEL_INFO,
