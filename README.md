@@ -7,7 +7,7 @@ You can see the previous version of FaCE in [here](https://github.com/meeeejin/F
 
 ## Documentation
 
-### Features
+### Main features
 
 - Caching dirty pages
 - Multi-Vesion FIFO replacement
@@ -40,6 +40,14 @@ You can add and set the value of parameter related to the SSD cache in the MySQL
     </td>
   </tr>
 </table>
+
+**my.cnf** example:
+```bash
+#ssd cache settings
+innodb_use_ssd_cache=true
+innodb_ssd_cache_file=/home/mijin/test_data/ssd_cache.db
+innodb_ssd_cache_size=10G
+```
 
 ### Reference
 
