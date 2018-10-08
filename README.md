@@ -1,5 +1,5 @@
 # MySQL with FaCE
-Flash Memory as Cache Extension for MySQL.
+Flash Memory as Cache Extension for MySQL 5.6.26.
 
 FaCE is a new low-overhead caching strategy that uses flash memory as an extension to the RAM buffer of database systems. FaCE aims at improving the transaction throughput as well as shortening the recovery time from a system failure.
 
